@@ -23,6 +23,8 @@ public class MainActivity extends AppCompatActivity {
         rndAccExamplevalues = new double[64];
         randomFill(rndAccExamplevalues);
         new FFTAsynctask(64).execute(rndAccExamplevalues);
+
+        // magnitude = sqrt(a^2 + b^2 + c^2)
     }
 
 
