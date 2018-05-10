@@ -9,11 +9,9 @@ import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.SeekBar;
 import android.widget.Switch;
-import android.widget.TextView;
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.Viewport;
 import com.jjoe64.graphview.series.DataPoint;
@@ -37,14 +35,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private GraphView accelerometerGraph;
     private LineGraphSeries<DataPoint> xLine, yLine, zLine, magnitudeLine, FFTLine;
 
+    private int windowSize = 200;
+    private int sampleRate = SensorManager.SENSOR_DELAY_NORMAL;
+    private int iFFT = 0;
 
     private Switch switchFFT;
     private SeekBar windowSizeBar;
     private SeekBar sampleRateBar;
 
-    private int windowSize = 256; // enforce power of 2
-    private int sampleRate = SensorManager.SENSOR_DELAY_NORMAL;
-    private int mIndexFFT = 0;
 
     public float getMagnitude(float x, float y, float z) {
         return (float) Math.sqrt(x * x + y * y + z * z);
@@ -225,25 +223,25 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+        outState.putInt("windowSize", windowSize);
+        outState.putInt("sampleRate", sampleRate);
+        outState.putBoolean("FFT", switchFFT.isChecked());
         outState.putInt("sampleRateBar_progress", sampleRateBar.getProgress());
         outState.putInt("windowSizeBar_progress", windowSizeBar.getProgress());
         outState.putInt("sampleRateBar_visibility", sampleRateBar.getVisibility());
         outState.putInt("windowSizeBar_visibility", windowSizeBar.getVisibility());
-        outState.putInt("windowSize", windowSize);
-        outState.putInt("sampleRate", sampleRate);
-        outState.putBoolean("FFT", switchFFT.isChecked());
     }
 
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
+        windowSize = savedInstanceState.getInt("windowSize");
+        sampleRate = savedInstanceState.getInt("sampleRate");
+        switchFFT.setChecked(savedInstanceState.getBoolean("FFT"));
         sampleRateBar.setProgress(savedInstanceState.getInt("sampleRateBar_progress"));
         windowSizeBar.setProgress(savedInstanceState.getInt("windowSizeBar_progress"));
         sampleRateBar.setVisibility(savedInstanceState.getInt("sampleRateBar_visibility"));
         windowSizeBar.setVisibility(savedInstanceState.getInt("windowSizeBar_visibility"));
-        windowSize = savedInstanceState.getInt("windowSize");
-        sampleRate = savedInstanceState.getInt("sampleRate");
-        switchFFT.setChecked(savedInstanceState.getBoolean("FFT"));
     }
 
     @Override
@@ -262,15 +260,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         zLine.appendData(new DataPoint(event.timestamp * N, event.values[2]), true, 250);
                         magnitudeLine.appendData(new DataPoint(event.timestamp * N, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
                     } else {
-                        if (mIndexFFT > windowSize) {
+                        if (iFFT > windowSize) {
                             magnitudeValues = new double[windowSize];
-                            mIndexFFT = 0;
-                        } else if (mIndexFFT < windowSize) {
-                            magnitudeValues[mIndexFFT] = getMagnitude(event.values[0], event.values[1], event.values[2]);
+                            iFFT = 0;
+                        } else if (iFFT < windowSize) {
+                            magnitudeValues[iFFT] = getMagnitude(event.values[0], event.values[1], event.values[2]);
                         } else {
                             new FFTAsynctask(windowSize).execute(magnitudeValues);
                         }
-                        ++mIndexFFT;
+                        ++iFFT;
                     }
 
                 }
