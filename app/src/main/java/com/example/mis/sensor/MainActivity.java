@@ -24,7 +24,7 @@ import java.util.Random;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
-    private static final float NS2S = 1.0f / 1000000000.0f;
+    private static final float N = 1.0f / 1000000000.0f;
     //example variables
     private double[] rndAccExamplevalues;
     private double[] freqCounts;
@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return (float) Math.sqrt(x * x + y * y + z * z);
     }
 
+    // show seebars when switch is checked
     public void toggleSeekbar(View view) {
 
         if (!switchFFT.isChecked()) {
@@ -63,10 +64,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         clearGraph(accelerometerGraph);
     }
 
+    // resets the diagram
     public void clearGraph(GraphView graph) {
         graph.removeAllSeries();
-        DataPoint[] clear_array = new DataPoint[0]; // create empty point array
-        xLine.resetData(clear_array);          // reset existing lines
+        DataPoint[] clear_array = new DataPoint[0];
+        xLine.resetData(clear_array);
         yLine.resetData(clear_array);
         zLine.resetData(clear_array);
         magnitudeLine.resetData(clear_array);
@@ -89,9 +91,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         accelerometer = null;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-
+        // https://code.tutsplus.com/tutorials/using-the-accelerometer-on-android--mobile-22125
         if (sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) {
-            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER); // accelerometer exists
+            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            // register listeners
             sensorManager.registerListener((SensorEventListener) this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
 
             switchFFT = findViewById(R.id.switchFFT);
@@ -110,6 +113,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         viewport.setScrollable(true);
         viewport.setScrollableY(true);
 
+        // initiate al of the graph series for the diagram
         xLine = new LineGraphSeries<>();
         xLine.setTitle("x data");
         xLine.setColor(Color.RED);
@@ -135,12 +139,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         FFTLine.setColor(Color.CYAN);
         accelerometerGraph.addSeries(FFTLine);
 
+        // window size regulation
+
         windowSize = (int) Math.pow(2, windowSizeBar.getProgress() + 3);
         windowSizeBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            int progress = 0;
-
+            int barProgress = 0;
+            // https://developer.android.com/reference/android/widget/SeekBar.OnSeekBarChangeListener
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                barProgress = progress;
                 progress = progress + 3;
                 windowSize = (int) Math.pow(2, progress);
             }
@@ -158,29 +165,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         magnitudeValues = new double[windowSize];
 
-        String delay_string = "";
-        switch (sampleRateBar.getProgress()) {
-            case 0:
-                delay_string = "SENSOR_DELAY_FASTEST";
-                break;
-            case 1:
-                delay_string = "SENSOR_DELAY_GAME";
-                break;
-            case 2:
-                delay_string = "SENSOR_DELAY_NORMAL";
-                break;
-            case 3:
-                delay_string = "SENSOR_DELAY_UI";
-                break;
-        }
+        String delay = "";
+        // https://stackoverflow.com/questions/17337504/need-to-read-android-sensors-with-fixed-sampling-rate
 
         sampleRateBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            int mProgress = 0;
+            int barProgress = 0;
 
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                mProgress = progress;
-                switch (mProgress) {
+                barProgress = progress;
+                // https://stackoverflow.com/questions/17337504/need-to-read-android-sensors-with-fixed-sampling-rate
+                switch (barProgress) {
                     case 0:
                         sampleRate = SensorManager.SENSOR_DELAY_FASTEST;
                         break;
@@ -194,31 +189,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         sampleRate = SensorManager.SENSOR_DELAY_UI;
                         break;
                 }
-                //Toast.makeText(getApplicationContext(), "Changing seekbar's progress to " + mProgress, Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
-                //Toast.makeText(getApplicationContext(), "Started tracking seekbar", Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                String delay_string = "";
-                switch (mProgress) {
-                    case 0:
-                        delay_string = "SENSOR_DELAY_FASTEST";
-                        break;
-                    case 1:
-                        delay_string = "SENSOR_DELAY_GAME";
-                        break;
-                    case 2:
-                        delay_string = "SENSOR_DELAY_NORMAL";
-                        break;
-                    case 3:
-                        delay_string = "SENSOR_DELAY_UI";
-                        break;
-                }
                 sensorManager.unregisterListener(MainActivity.this);
                 sensorManager.registerListener(MainActivity.this, accelerometer, sampleRate);
             }
@@ -250,22 +228,22 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         outState.putInt("sampleRateBar_progress", sampleRateBar.getProgress());
         outState.putInt("windowSizeBar_progress", windowSizeBar.getProgress());
         outState.putInt("sampleRateBar_visibility", sampleRateBar.getVisibility());
-        outState.putInt("mWindowSizeBar_visibility", windowSizeBar.getVisibility());
-        outState.putInt("mWindowSize", windowSize);
-        outState.putInt("mSampleRate", sampleRate);
-        outState.putBoolean("useFFT", switchFFT.isChecked());
+        outState.putInt("windowSizeBar_visibility", windowSizeBar.getVisibility());
+        outState.putInt("windowSize", windowSize);
+        outState.putInt("sampleRate", sampleRate);
+        outState.putBoolean("FFT", switchFFT.isChecked());
     }
 
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
-        sampleRateBar.setProgress(savedInstanceState.getInt("mSampleRateBar_progress"));
-        windowSizeBar.setProgress(savedInstanceState.getInt("mWindowSizeBar_progress"));
-        sampleRateBar.setVisibility(savedInstanceState.getInt("mSampleRateBar_visibility"));
-        windowSizeBar.setVisibility(savedInstanceState.getInt("mWindowSizeBar_visibility"));
-        windowSize = savedInstanceState.getInt("mWindowSize");
-        sampleRate = savedInstanceState.getInt("mSampleRate");
-        switchFFT.setChecked(savedInstanceState.getBoolean("useFFT"));
+        sampleRateBar.setProgress(savedInstanceState.getInt("sampleRateBar_progress"));
+        windowSizeBar.setProgress(savedInstanceState.getInt("windowSizeBar_progress"));
+        sampleRateBar.setVisibility(savedInstanceState.getInt("sampleRateBar_visibility"));
+        windowSizeBar.setVisibility(savedInstanceState.getInt("windowSizeBar_visibility"));
+        windowSize = savedInstanceState.getInt("windowSize");
+        sampleRate = savedInstanceState.getInt("sampleRate");
+        switchFFT.setChecked(savedInstanceState.getBoolean("FFT"));
     }
 
     @Override
@@ -279,18 +257,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 public void run() {
 
                     if (!switchFFT.isChecked()) {
-                        // graph: x direction time, y direction coor value
-                        xLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 250);
-                        yLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 250);
-                        zLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 250);
-                        magnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+                        xLine.appendData(new DataPoint(event.timestamp * N, event.values[0]), true, 250);
+                        yLine.appendData(new DataPoint(event.timestamp * N, event.values[1]), true, 250);
+                        zLine.appendData(new DataPoint(event.timestamp * N, event.values[2]), true, 250);
+                        magnitudeLine.appendData(new DataPoint(event.timestamp * N, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
                     } else {
-                        if (mIndexFFT > windowSize) {        // reset array and index
+                        if (mIndexFFT > windowSize) {
                             magnitudeValues = new double[windowSize];
                             mIndexFFT = 0;
-                        } else if (mIndexFFT < windowSize) { // add magnitude values to array
+                        } else if (mIndexFFT < windowSize) {
                             magnitudeValues[mIndexFFT] = getMagnitude(event.values[0], event.values[1], event.values[2]);
-                        } else {                              // use fft on gathered data
+                        } else {
                             new FFTAsynctask(windowSize).execute(magnitudeValues);
                         }
                         ++mIndexFFT;
