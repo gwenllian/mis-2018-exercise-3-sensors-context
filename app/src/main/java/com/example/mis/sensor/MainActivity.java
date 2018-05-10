@@ -1,12 +1,20 @@
 package com.example.mis.sensor;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.AsyncTask;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -18,11 +26,17 @@ import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.Viewport;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
+import android.support.v4.app.ActivityCompat;
 import com.example.mis.sensor.FFT;
 
+import java.lang.reflect.Array;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Random;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener {
+public class MainActivity extends AppCompatActivity implements SensorEventListener, LocationListener {
+
+    private static final String TAG = "MainActivity";
 
     private static final float N = 1.0f / 1000000000.0f;
     //example variables
@@ -37,7 +51,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private GraphView accelerometerGraph;
     private LineGraphSeries<DataPoint> xLine, yLine, zLine, magnitudeLine, FFTLine;
 
-
     private Switch switchFFT;
     private SeekBar windowSizeBar;
     private SeekBar sampleRateBar;
@@ -46,11 +59,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private int sampleRate = SensorManager.SENSOR_DELAY_NORMAL;
     private int mIndexFFT = 0;
 
+    private MediaPlayer mediaPlayer;
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
+    private int PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 2;
+
+    private LocationManager locationManager;
+    private float speed = 0.0f;
+
+    public enum ActivityState {JOG, CYCLE, NONE};
+    private ActivityState latestState = ActivityState.NONE;
+
     public float getMagnitude(float x, float y, float z) {
         return (float) Math.sqrt(x * x + y * y + z * z);
     }
 
-    // show seebars when switch is checked
+    // show seekbars when switch is checked
     public void toggleSeekbar(View view) {
 
         if (!switchFFT.isChecked()) {
@@ -105,6 +128,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             windowSizeBar.setVisibility(View.GONE);
             sampleRateBar.setVisibility(View.GONE);
         }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
+                    PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+        }
+        mediaPlayer = new MediaPlayer();
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        startLocationServices();
+
         accelerometerGraph = findViewById(R.id.accelerometer);
         accelerometerGraph.setBackgroundColor(Color.LTGRAY);
         Viewport viewport = accelerometerGraph.getViewport();
@@ -210,6 +243,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     @Override
+    protected void onDestroy(){
+        super.onDestroy();
+        sensorManager.unregisterListener(this);
+        locationManager.removeUpdates(this);
+        mediaPlayer.stop();
+        mediaPlayer.release();
+        mediaPlayer = null;
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         sensorManager.registerListener((SensorEventListener) this, accelerometer, sampleRate);
@@ -219,6 +262,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     protected void onPause() {
         super.onPause();
         sensorManager.unregisterListener((SensorEventListener) this);
+    }
+
+
+
+    private void startLocationServices() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            // Permission to access the location is missing.
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    LOCATION_PERMISSION_REQUEST_CODE);
+        } else {
+            // Access to the location has been granted to the app.
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 4.0f, this);
+        }
     }
 
     //https://stackoverflow.com/a/2441702
@@ -315,6 +373,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 magnitude[i] = Math.sqrt(Math.pow(realPart[i], 2) + Math.pow(imagPart[i], 2));
             }
 
+            Log.i("mag", Arrays.toString(magnitude));
+
             return magnitude;
 
         }
@@ -327,6 +387,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             DataPoint[] fft_point = new DataPoint[this.wsize];
             for (int i = 0; i < this.wsize; ++i) {
                 fft_point[i] = new DataPoint(i, freqCounts[i]);
+                if(freqCounts[i] > 8.0 && freqCounts[i] < 11){ // !!!!!
+                    latestState = ActivityState.JOG;
+                }
+                else if(freqCounts[i] > 11){
+                    latestState = ActivityState.CYCLE;
+                }
+                else {
+                    latestState = ActivityState.NONE;
+                }
+                playMusic(latestState);
             }
             FFTLine.resetData(fft_point);
         }
@@ -341,6 +411,45 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         for(int i = 0; array.length > i; i++){
             array[i] = rand.nextDouble();
         }
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        Log.d(TAG, "Location changed: " + location);
+
+        speed = location.getSpeed();
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    public void playMusic(ActivityState state){
+        if(state == ActivityState.JOG) {
+            mediaPlayer = MediaPlayer.create(this, R.raw.siesta);
+            mediaPlayer.start();
+        }
+        else if(state == ActivityState.CYCLE) {
+            mediaPlayer = MediaPlayer.create(this, R.raw.enthusiast);
+            mediaPlayer.start();
+        }
+        else {
+            mediaPlayer.release();
+        }
+
+
+
     }
 
 
